@@ -290,7 +290,7 @@ function match(expectedToken) {
 	}
 }
 
-function parseProgram() {
+function program() {
 	if currentToken() == (INT || FLOAT) {
 		decls();
 		match(';');

@@ -18,8 +18,17 @@ expr    -> expr ';' expr
         | num
         | id
 
-1. Provide the lexical specification for the grammar using a flex-style generator.
+
+########################################################
+              FIRST QUESTION 
+########################################################
+
+1. Provide the lexical specification for the grammar using a [] generator.
    Allow for whitespace, as well as single line and multiple lines comments.
+
+########################################################
+              FLEX STYLE GENERATOR 
+########################################################
 
 %%
 
@@ -37,262 +46,366 @@ expr    -> expr ';' expr
 ";"                                     { return SEMICOL;  }
 [ \t\n\r]+                              { /* skip whitespaces    */ }
 "//".*                                  { /* single line comment */ }
-\/\*([^*]|\*+[^\*\/])*\*+\/             { /* multi line comment  */ }
+/\*[^*]*\*+([^/*][^*]*\*+)*/            { /* multi line comment  */ }
 
 %%
+
+
+########################################################
+              MANUAL GENERATOR 
+########################################################
+
+reserved = {"int": INT, "float": FLOAT}
+
+function getTokens() {
+  pos = 0;
+
+  skipWhitespaces();
+
+  // IDs and keywords
+
+  if isLetter(c) {
+    start = pos;
+    while (pos < input.size() && (isLetter(input[pos]) || isDigit(input[pos])) {
+      pos++;
+    }
+    lexeme = input[start..pos]
+    if(lexeme is in reserved) {
+      return Token(ID, lexeme);
+    }
+  }
+
+  // Numbers
+
+  if isDigit(c) {
+    start = pos;
+
+    // integer part
+
+    while (pos < input.size() && isDigit(input[pos])) {
+      pos++;
+    }
+
+    // decimal part
+
+    if (pos < input.size() && input[pos] == '.'
+                           && pos+1 < input.size()
+                           && isDigit(input[pos+1])
+                           ) {
+      pos++;
+    }
+
+    while (pos < input.size() && isDigit(input[pos])) {
+      pos++;
+    }
+    
+    // Exponent
+
+    if (pos < input.size() && input[pos] == ('e'||'E')) {
+      stored_pos = pos;
+      next_char = pos + 1;
+      if(next_char < input.size() && next_char == ('+'||'-')) {
+        next_char++;
+      }
+      if(next_char < input.size() && isDigit(input[next_char])) {
+        pos = next_char;
+        while(pos < input.size() && isDigit(input[pos])) {
+          pos++;
+        }
+      }
+      else {
+        pos = stored_pos; 
+      }
+    }
+    lexeme = input[start..pos]
+    return Token(NUM, lexeme)
+
+    // Single char symbols
+
+    pos++;
+    switch(c) {
+      case'+': return Token(ADD, "+");
+      case'-': return Token(SUB, "-");
+      case'*': return Token(MULT, "*");
+      case'/': return Token(DIV, "/");
+      case',': return Token(assign, ",");
+      case';': return Token(SEMCOL, ";");
+      case'=': return Token(EQ, "=");
+      case'(': return Token(OPPAR, "(");
+      # case')': return Token(CLOPAR, ")");
+      # case'{': return Token(OPBRA, "{");
+      # case'}': return Token(CLOBRA, "}");
+      default: error("unrecognized character: " + c + "in line: " + line_number);
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+###############################################################
+												SECOND QUESTION
+###############################################################
 
 2. a. Is the grammar ambiguous? If so, propose an unambiguous one.
 
-Yes, the grammar is ambiguous, this is caused by the lack of precedences in the grammar;
-for example, for the following line of code:
+Yes, the grammar is ambiguous, this is because there are no stablished precendes between operators
 
-a + b * c
+For example:
 
-the compiler can read:
+for id + id * id
 
-(a + b) * c
+There is this derivation:
 
-or also:
+expr
+-> expr '*' expr
+-> expr '+' expr '*' expr
+-> id '+' expr '*' expr
+-> id '+' id '*' expr
+-> id '+' id '*' id
 
-a + (b * c)
+and also this one:
 
-a proposal for a non-ambiguous grammar is the following:
+expr
+-> expr '+' expr
+-> id '+' expr 
+-> id '+' expr '*' expr
+-> id '+' id '*' expr
+-> id '+' id '*' id
 
-program -> decls ';' assign_expr
-        | assign_expr
+The following is a proposition of a non-ambiguous grammar:
 
-decls -> decl ';' decls
-    	| decl
+program       -> decls ';' assign_expr
+              | assign_expr
 
-decl -> type id
+decls         -> decl ';' decls
+              | decl
 
-type -> int
-			| float
+decl          -> type id
 
-assign_expr -> id '=' add_expr
-						| add_expr
+type          -> int
+              | float
 
-add_expr -> add_expr '+' mult_expr
-					| add_expr '-' mult_expr
-					| mult_expr
+assign_expr   -> id '=' assign_expr
+              | add_expr
 
-mult_expr -> mult_expr '*' unary_expr
-					| mult_expr '/' unary_expr
-					| unary_expr
+add_expr      -> add_expr '+' mult_expr
+              | add_expr '-' mult_expr
+              | mult_expr
 
-unary_expr -> '-' primary
-						| primary
+mult_expr     -> mult_expr '*' primary
+              | mult_expr '/' primary
+              | primary
 
-primary -> num
-				| id
-				| '(' assign_expr ')'
-        | '{' decls ';' assign_expr '}'
-        | '{' assign_expr '}'
+primary       -> '(' assign_expr ')'
+              | '{' assign_expr '}'
+              | '{' decls ';' assign_expr '}'
+              | num
+              | id
 
-   b. Write the code for a bison-style parser based on the grammar you proposed.
+ b. Write the code for a [] parser based on the grammar you proposed.
+ 
+###############################################################
+                AUTOMATIC LR JISON-STYLE PARSER
+###############################################################
 
-%token ADD SUB MULT DIV EQ
-%token ID NUM INT FLOAT OPPAR CLOPAR OPBRA CLOBRA
-%token UMINUS
+program         -> decls SEMCOL assign_expr
+                | assign_expr
+                ;
 
-%right EQ
-%left ADD SUB
-%left MULT DIV
-%right UMINUS
+decls           -> decl SEMCOL decls
+                | decl
+                ;
 
-%%
+decl            -> type ID
 
-program				: decls SEMICOL assign_expr
-							| assign_expr
-							;
+type            -> INT
+                | FLOAT
+                ;
 
-decls					: decl SEMICOL decls
-							| decl
-							;
+assign_expr     -> ID EQ assign_expr
+                | add_expr
+                ;
 
-decl					: type ID
-							;
+add_expr        -> add_expr ADD mult_expr
+                | add_expr SUB mult_expr
+                | mult_expr
+                ;
 
-type					: INT
-							| FLOAT
-							;
+mult_expr       -> mult_expr MULT primary
+                | mult_expr DIV primary
+                | primary
+                ;
 
-assign_expr 	: ID EQ add_expr 
-							| add_expr
+primary         -> OPPAR assign_expr CLOPAR
+                | OPBRA assign_expr CLOBRA
+                | OPBRA decls SEMCOL assign_expr CLOBRA
+                | NUM
+                | ID
+                ;
 
-add_expr 			: add_expr ADD mult_expr
-							| add_expr SUB mult_expr
-							| mult_expr
-							;
+###############################################################
+                MANUAL LL PREDICTIVE PARSER
+###############################################################
 
-mult_expr     : mult_expr MULT unary_expr
-							| mult_expr DIV  unary_expr
-							| unary_expr
-							;
 
-unary_expr    : SUB primary %prec UMINUS
-							| primary
-							;
+First, we have to modify the grammar slightly to eliminate left recursion:
 
-primary				: ID
-							| NUM
-							| OPPAR assign_expr CLOPAR
-							| OPBRA decls SEMICOL assign_expr CLOBRA
-							| OPBRA assign_expr CLOBRA
-							;
+program         -> decls ';' comma_expr
+                | comma_expr
 
-3. a. Define the data structure for the symbol table. Write a syntax-directed
-      definition to perform scope analysis based on the grammar you proposed.
+decls           -> decl ';' decls
+                | decl
 
-			SymbolEntry {
-				name: string
-				type: INT | FLOAT
-				kind: VAR
-			}
+decl            -> type id
 
-			SymbolTable = stack<HashTable<name, SymbolEntry>>
-			
-			
-			with operations:
-				enter_scope() // push to the stack
-				exit_scope()  // pop from the stack
-				insert(name, entry)
-				lookup(name)
+type            -> int
+                | float
 
-			program -> decls ';' assign_expr
-			{ 
-				enter_scope();
-				decls.env = env;
-				assign_expr.env = env;
-				exit_scope();
-			}
+assign_expr     -> id '=' as
+sign_expr
+                | add_expr
 
-			program -> assign_expr
-			{
-				enter_scope();
-				assign_expr.env = env;
-				exit_scope();
-			}
+add_expr        -> mult_expr add_expr_prime
+add_expr_prime  -> '+' mult_expr add_expr_prime
+                | '-' mult_expr add_expr_prime
+                | ε
 
-			decls -> decl ';' decls2
-			{
-				decl.env = env;
-				decls2.env = env;
-			}
+mult_expr       -> primary mult_expr'
+mult_expr'      -> '*' primary mult_expr'
+                | '/' primary mult_expr'
+                | ε
 
-			decls -> decl
-			{
-				decl.env = env;
-			}
+primary         -> '(' comma_expr ')'
+                | '{' comma_expr '}'
+                | '{' decls ';' comma_expr '}'
+                | num
+                | id        
 
-			decl -> type id;
-			{
-				if(lookup(id) != null) { error("variable redeclaration"); }
-				insert(ID, SymbolEntry(ID, type.type));
-			}
+Then the parser would look like this:
 
-			type -> int
-			{
-				type.type = int;
-			}
+currentToken()  { return tokens[pos];     }
+nextToken()     { return tokens[pos + 1]; }
+peek(k)         { return tokens[pos + k]; }
 
-			type -> float
-			{
-				type.type = float;
-			}
+function match(expectedToken) {
+  if (currentToken() == expectedToken) {
+    pos++;
+  }
+  else {
+    error();
+  }
+}
 
-			primary -> id
-			{
-				if(lookup(id) == null) { error("undefined variable"); }
-			}
+function program() {
+  if(currentToken() == (INT||FALSE)) {
+    decls();
+    match(';');
+    comma_expr();
+  }
+  else {
+    comma_expr();
+  }
+}
 
-			primary -> '(' assign_expr ')'
-			{
-				assign_expr.env = env;
-			}
+function decls() {
+  decl();
+  if(curentToken() == ';') {
+    match(';');
+    if(currentToken() == (INT||FALSE)) {
+      decls();
+    }
+  }
+}
 
-      primary -> '{' decls ';' assign_expr '}'
-			{
-				enter_scope();
-				decls.env = env;
-				assign_expr.env = env;
-				exit_scope();
-			}
+function decl() {
+  type();
+  match(ID);
+}
 
-			primary -> '{' assign_expr '}'
-			{
-				enter_scope();
-				assign_expr.env = env;
-				exit_scope();
-			}
+funtion type() {
+  if(currentToken() == INT)   { match(INT); }
+  elseif(currentToken() == FLOAT) { match(FLOAT); }
+  else { error(); }
+}
 
-   b. Define the data structure for the expression types and the typing rules.
-      Write a syntax-directed definition to perform type analysis based on the
-      grammar you proposed.
+function assign_expr() {
+  if(curentToken == ID && peek(1) == '=') {
+    match(ID);
+    match('=');
+    assign_expr();
+  }
+  else{
+    add_expr();
+  }
+}
 
-			T ::= INT | FLOAT
+function add_expr() {
+  mult_expr();
+  add_expr_prime();
+}
 
-			type(num) = INT | FLOAT | ERROR
+function add_expr_prime() {
+  while(curentToken() == ('+'||'-')) {
+    if(curentToken() == '+') {
+      match('+');
+    }
+    elseif(curentToken() == '-') {
+      match('-');
+    }
+    mult_expr();
+  }
+}
 
-			type(ID) = lookup(id).type
+function mult_expr() {
+  primary();
+  mult_expr_prime();
+}
 
-			type(e1 + e2) =
-				if((type(e1) == FLOAT || type(e2) == FLOAT) && (type(e1) != ERROR && type(e2) != ERROR)) {
-					return FLOAT;
-				}
-				else {
-					error("Incorrect type");
-				}
+funtion mult_expr_prime() {
+  while(curentToken() == ('*'||'/')) {
+    if(currentToken() == '*') { 
+      match('*'); 
+    }
+    elseif(currentToken() == '/') {
+      match('/');
+    }
+    primary();
+  }
+}
 
-			(same for - and *)
+function primary() {
+switch(currentToken()) {
+  case '(':
+    match('(');
+    assign_expr();
+    match(')');
+    break;
 
-			type(e1 / e2) =
-				if(type(e1) == ERROR || type(e2) == ERROR) { error("Incorrect type"); }
-				else { return FLOAT; }
+  case '{':
+    match('{');
+    if(nextToken()¡ == ';') {
+      decls();
+      match(';');
+    } 
+    assign_expr();
+    match('}');
+    break;
 
-			type(id = e1) =
-				if(type(id) == ERROR || type(e1) == ERROR) { error("Incorrect type"); }
-				elsif(type(id) == FLOAT || type(e1) == FLOAT) { return FLOAT; }
-				else { return INT; }
+  case 'NUM':
+    match(NUM);
+    break;
 
-4. Write a syntax-directed definition that generates a @Babel-style AST as the
-   intermediate representation based on the grammar you proposed.
+  case 'ID':
+    match(ID);
+    break;
 
-	program -> decls ';' assign_expr
-		Program(body = [...decls.node, ExpressionStatement(assign_expr)])
-
-	program -> assign_expr
-		Program(body = [...ExpressionStatement(assign_expr)])
-
-	decl -> type id
-		VariableDeclarator (
-			kind: "let"
-			declarations: [VariableDeclaration(id, ERROR)]
-		)
-
-	assign_expr -> id '=' add_expr
-		AssignmentExpression(id, add_expr)
-
-	add_expr -> add_expr '+' mult_expr
-		BinaryExpression('+', add_expr, mult_expr)
-	
-	(same for -)
-
-	mult_expr -> mult_expr '*' primary
-		BinaryExpression('*', mult_expr, primary)
-
-	(same for /)
-
-	primary -> id
-		Identifier(id)
-
-	primary -> num
-		NumericLiteral(num)
-
-	primary -> '(' assign_expr ')'
-		assign_expr.node
-
-	primary -> '{' decls ';' assign_expr '}' | '{' assign_expr '}'
-		BlockStatement(
-			body = [...]
-		)
+  default: 
+    error();
+    break;
+}
