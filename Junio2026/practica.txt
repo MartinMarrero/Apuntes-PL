@@ -1,0 +1,590 @@
+Given the following grammar:
+
+program -> decls ';' expr | expr
+
+decls   -> decl ';' decls | decl
+
+decl    -> type id
+
+type    -> int | float
+
+expr    -> expr ',' expr
+        | expr '+' expr
+        | expr '-' expr
+        | expr '*' expr
+        | expr '/' expr
+        | id '=' expr
+        | '(' expr ')'
+        | '{' expr '}'
+        | num
+        | id
+
+1. Provide the lexical specification for the grammar using a [] generator.
+	 Allow for whitespace, as well as single line and multiple lines comments. Consider error handling
+
+######################################## FLEX-STYLE GENERATOR ##################################
+
+%%
+
+"int"                         				{ return INT;   }
+"float"                               { return FLOAT; }
+[a-zA-Z_][a-zA-Z0-9_]*                { return ID;    }
+[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?   { return NUM; 	} 
+"+"                           				{ return ADD;   }
+"-"                           				{ return SUB;   }
+"/"                           				{ return DIV;   }
+"*"                           				{ return MULT;  }
+"="                           				{ return EQ;    }
+","                           				{ return COMMA; }
+"("                           				{ return OPPAR; }
+")"                           				{ return CLOPAR;}
+"{"                           				{ return OPBRA; }
+"}"                           				{ return CLOBRA;}
+[ \t\n\r]+                    				{ /* ignore whitespaces  */ }
+"//".*                        				{ /* single-line comment */ }
+/\*[^*]*\*+([^/*][^*]*\*+)*/  				{ /* multi-line comment  */ }
+<<EOF>>                       				{ return EOF;   } 
+.                             				{ fprintf(stderr, "LEXICAL ERROR: unexpected character '%s'\n", yytext); }
+
+######################################## MANUAL JS GENERATOR ##########################################
+
+reserved = { "int": INT, "float": FLOAT }
+
+function getNextToken() {
+	skipWhitespaces();
+
+	if (pos >= input.size()) {
+		return Token(EOF, "");
+	}
+
+	// Identifiers and keywords
+
+	if isLetter(c) {
+		start = pos;
+		while pos < input.size() && (isLetter(input[pos]) || isDigit(input[pos])) {
+			pos++
+		}
+		lexeme = input[start..pos]
+		if lexeme in reserved {
+			return Token(ID, lexeme)
+		}
+	}
+
+	// numbers
+
+	if isDigit(c) {
+		start = pos;
+	
+		// integer part
+
+		while pos < input.size() && isDigit(input[pos]) {
+			pos++;
+		}
+
+		if pos < input.size() && input[pos] == '.'
+													&& pos+1 < input.size()
+													&& isDigit(input[pos+1]) {
+		pos++;
+		}	
+		while pos < input.size() && isDigit(input[pos]) {
+			pos++;
+		}
+
+		// exponent
+
+		if pos < input.size() && input[pos] == ('e'||'E') {
+			stored_pos = pos;
+			p = pos + 1;
+
+			// sign
+
+			if p < input.size() && input[p] == ('+'||'-') {
+				p++;
+			}
+
+			// check if there's a number following the sign
+
+			if p < input.size() && isDigit(input[p]) {
+				pos = p;
+				while pos < input.size() && isDigit(input[pos]) {
+					pos++;
+				}
+			}
+			else {
+				pos = stored_pos; // not a valid exponent, return.
+			}
+		}
+		lexeme = input[start..pos];
+		return Token(NUM, lexeme);
+	}
+
+	// single char symbols
+
+	pos++
+	switch c: {
+		case '+': return Token(ADD, "+")
+		case '-': return Token(SUB, "-")
+		case '/': return Token(DIV, "/")
+		case '*': return Token(MULT, "*")
+		case ',': return Token(COMMA, ".")
+		case ';': return Token(SEMCOL, ";")
+		case '=': return Token(EQ, "=")
+		case '(': return Token(OPPAR, "(")																					                             	)
+#		case ')': return Token(CLOPAR, ")")
+#		case '{': return Token(OPBRA, "{")
+#		case '}': return Token(CLOBRA, "}")
+		default: error("unrecognized character: " + c + "in line: " + line_number)
+	}
+
+###############################################################
+												SECOND QUESTION
+###############################################################
+
+2. a. Is the grammar ambiguous? If so, propose an unambiguous one.
+
+Yes, the grammar is ambiguous.This is mostly due to a lack of precedences
+between the different possible tokens in the grammar, which may lead to 
+undeterministic or incorrect readings of the input.
+
+We can prove the ambiguousness of the grammar through building the same
+string via two different trees or derivations.
+
+For example, for id + id * id:
+
+expr
+-> expr '*' expr
+-> expr '+' expr '*' expr
+-> id '+' expr '*' expr
+-> id '+' id '*' expr
+-> id '+' id '*' id
+
+and
+
+expr
+-> expr '+' expr
+-> id '+' expr 
+-> id '+' expr '*' expr
+-> id '+' id '*' expr
+-> id '+' id '*' id
+
+A proposal for this grammar is:
+
+program -> decls ';' comma_expr | comma_expr
+
+decls   -> decl ';' decls | decl
+
+decl    -> type id
+
+type    -> int | float
+
+comma_expr -> comma_expr ',' assign_expr
+						| assign_expr
+
+assign_expr -> id '=' assign_expr
+						| add_expr
+
+add_expr -> add_expr '+' mult_expr
+					| add_expr '-' mult_expr
+					| mult_expr
+
+mult_expr -> mult_expr '*' primary	
+					| mult_expr '/' primary
+					| primary
+
+primary -> '(' comma_expr ')'
+        | '{' comma_expr '}'
+        | num
+        | id
+
+   b. Write the code for a [] parser based on the grammar you proposed.
+
+######################## ASCENDENT LR JISON-STYLE PARSER #######################
+
+program -> decls SEMICOL comma_expr
+				| comma_expr
+				;
+
+decls -> decl SEMICOL decls
+				| decl
+				;
+
+decl  -> type ID
+			;
+
+type  -> INT
+			| FLOAT
+			;
+
+comma_expr -> comma_expr COMMA assign_expr
+						| assign_expr
+						;
+
+assign_expr -> ID EQ assign_expr
+						| add_expr
+						;
+
+add_expr -> add_expr ADD mult_expr
+					| add_expr SUB mult_expr
+					| mult_expr
+					;
+
+mult_expr -> mult_expr MULT primary
+					| mult_expr DIV primary
+					| primary
+					;
+
+primary -> OPPAR comma_expr CLOPAR
+				| OPBRA comma_expr CLOBRA
+				| NUM
+				| ID
+				;
+
+##################### MANUAL LL PREDICTIVE PARSER ####################
+
+First, we have to modify the grammar slightly to eliminate left recursion:
+
+program     -> decls ';' comma_expr | comma_expr
+
+decls       -> decl ';' decls | decl
+
+decl        -> type id
+
+type        -> int | float
+
+comma_expr  -> assign_expr comma_expr'
+comma_expr' -> ',' assign_expr comma_expr'
+             | ε
+
+assign_expr -> id '=' assign_expr
+             | add_expr
+
+add_expr    -> mult_expr add_expr'
+add_expr'   -> '+' mult_expr add_expr'
+             | '-' mult_expr add_expr'
+             | ε
+
+mult_expr   -> primary mult_expr'
+mult_expr'  -> '*' primary mult_expr'
+             | '/' primary mult_expr'
+             | ε
+
+primary     -> '(' comma_expr ')'
+             | '{' comma_expr '}'
+             | num
+             | id
+
+The parser would look like:
+
+pos = 0;
+
+function currentToken() { return tokens[pos]; }
+function nextToken() { return tokens[pos+1];  }
+function peek(k)  {  return tokens[pos + k];  }
+
+function match(expectedToken) {
+	if currentToken() == expectedToken() {
+		pos += 1;
+	}
+	else { 
+		error(); 
+	}
+}
+
+function parseProgram() {
+	if currentToken() == (INT || FLOAT) {
+		decls();
+		match(';');
+		comma_expr();
+	}
+	else {
+		comma_expr(); 
+	}
+}
+
+function decls() {
+	decl();
+
+	if(currentToken() == ';') {
+		match(';')
+		if(currentToken() == (INT || FLOAT)) {
+			decls();
+		}
+	}
+}
+
+function decl() {
+	type();
+	match(ID);
+}
+
+function type() {
+	if(currentToken() == INT) {
+		match(INT);
+	}
+	elseif(currentToken() == FLOAT) {
+		match(FLOAT);
+	}
+	else {
+		error();
+	}
+}
+
+function comma_expr() {
+	assign_expr();
+	comma_expr_prime();
+}
+
+funcion comma_expr_prime() {
+	if(currentToken() == ',') {
+		match(',');
+		assign_expr();
+	}
+}
+
+function assign_expr() {
+	if(curentToken == ID && peek(1) == '=') {
+		match(ID);
+		match ('=');
+		assign_expr();
+	}
+	else {
+		add_expr();	
+	}
+}
+
+function add_expr() {
+	mult_expr();
+	add_expr_prime();
+}
+
+function add_expr_prime() {
+	while(currentToken() == ('+'||'-'))
+		if(currentToken() == '+') 		{ match('+'); }
+		elseif(currentToken() == '-') { match('-');	}
+		mult_expr();
+	}
+}
+
+function mult_expr() {
+	primary();
+	mult_expr_prime();
+}
+
+function mult_expr_prime() {
+	while(currentToken == ('*'||'/')) {
+		if(currentToken() == '*') 		{ match('*'); }
+		elseif(currentToken() == '/') { match('/');	}
+		primary();
+	}
+}
+
+function primary() {
+	switch(currentToken()) {
+	
+		case '(':
+			match('(');
+			comma_expr();
+			match(')');
+			break;
+
+		case '{':
+			match('{');
+			comma_expr();
+			match('}');
+			break;
+
+		case NUM:
+			match(NUM);
+			break;
+
+		case ID:
+			match(ID);
+			break;
+		
+		default:
+			error();
+	}
+}
+
+
+###############################################################
+												THIRD QUESTION
+###############################################################
+
+3. a. Define the data structure for the symbol table. Write a syntax-directed
+      definition to perform scope analysis based on the grammar you proposed.
+
+		SymbolTable {
+			name: string
+			type: INT | FLOAT
+			kind: var
+		}
+
+		SymbolTable = HashTable<string, SymbolEntry>
+
+		# Operations:
+
+		insert(name, SymbolEntry)
+		lookup(name) 
+
+		# Productions semantically relevant
+
+		decl -> type id
+		{
+			if lookup(id.lexeme) != null
+   	 		error("Variable '" + id.lexeme + "' already declared");
+			insert(id.lexeme, type.type);
+		}
+
+		type -> int 
+		{
+			type.type = INT;
+		}
+
+		type -> float
+		{
+			type.type = FLOAT;
+		}
+
+		assign_expr -> id '=' assign_expr
+		{
+			if (lookup(id.lexeme) == null)
+				error("Variable '" + id.lexeme + "' not declared");
+		}
+
+		primary -> id
+		{
+			if (lookup(id.lexeme) == null)
+        error("Variable '" + id.lexeme + "' not declared");
+		}
+
+   b. Define the data structure for the expression types and the typing rules.
+      Write a syntax-directed definition to perform type analysis based on the
+      grammar you proposed.
+
+		TypeMap {
+			INT: 4,
+			FLOAT: 8,
+			ERROR: 0
+		}
+
+		type → int
+		{
+				type.type = INT;
+		}
+
+		type → float
+		{
+				type.type = FLOAT;
+		}
+
+		primary → num
+		{
+				primary.type = num.type;
+		}
+
+		primary → id
+		{
+				entry = lookup(id.lexeme);
+
+				if (entry == null) {
+						error("Variable '" + id.lexeme + "' not declared");
+						primary.type = ERROR;
+				}
+				else
+						primary.type = entry.type;
+		}
+
+		primary → '(' comma_expr ')'
+		{
+				primary.type = comma_expr.type;
+		}
+
+		primary → '{' comma_expr '}'
+		{
+				primary.type = comma_expr.type;
+		}
+
+		mult_expr → mult_expr '*' primary
+		{
+				if (mult_expr.type == ERROR || primary.type == ERROR)
+						mult_expr.type = ERROR;
+				else if (mult_expr.type == FLOAT || primary.type == FLOAT)
+						mult_expr.type = FLOAT;
+				else
+						mult_expr.type = INT;
+		}
+
+		mult_expr → mult_expr '/' primary
+		{
+				if (mult_expr.type == ERROR || primary.type == ERROR)
+						mult_expr.type = ERROR;
+				else if (mult_expr.type == FLOAT || primary.type == FLOAT)
+						mult_expr.type = FLOAT;
+				else
+						mult_expr.type = INT;
+		}
+
+		mult_expr → primary
+		{
+				mult_expr.type = primary.type;
+		}
+
+		add_expr → add_expr '+' mult_expr
+		{
+				if (add_expr.type == ERROR || mult_expr.type == ERROR)
+						add_expr.type = ERROR;
+				else if (add_expr.type == FLOAT || mult_expr.type == FLOAT)
+						add_expr.type = FLOAT;
+				else
+						add_expr.type = INT;
+		}
+
+		add_expr → add_expr '-' mult_expr
+		{
+				if (add_expr.type == ERROR || mult_expr.type == ERROR)
+						add_expr.type = ERROR;
+				else if (add_expr.type == FLOAT || mult_expr.type == FLOAT)
+						add_expr.type = FLOAT;
+				else
+						add_expr.type = INT;
+		}
+
+		add_expr → mult_expr
+		{
+				add_expr.type = mult_expr.type;
+		}
+
+		assign_expr → id '=' assign_expr
+		{
+				entry = lookup(id.lexeme);
+
+				if (entry == null) {
+						error("Variable '" + id.lexeme + "' not declared");
+						assign_expr.type = ERROR;
+				}
+				else if (assign_expr.type == ERROR) {
+						assign_expr.type = ERROR;
+				}
+				else if (entry.type != assign_expr.type) {
+						error("Type mismatch in assignment.");
+						assign_expr.type = ERROR;
+				}
+				else
+						assign_expr.type = entry.type;
+		}
+
+		assign_expr → add_expr
+		{
+				assign_expr.type = add_expr.type;
+		}
+
+		comma_expr → comma_expr ',' assign_expr
+		{
+				comma_expr.type = assign_expr.type;
+		}
+
+		comma_expr → assign_expr
+		{
+				comma_expr.type = assign_expr.type;
+		}

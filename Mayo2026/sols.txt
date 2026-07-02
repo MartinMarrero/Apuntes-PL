@@ -1,0 +1,91 @@
+2. a. Is the grammar ambiguous? If so, propose an unambiguous one.
+
+Sí, la gramática es ambigua, pues no establece un orden de precedencias para prácticamente ninguna operación. Por ejemplo, la siguiente línea:
+
+a + b * c
+
+El compilador podría interpretarla como:
+
+(a + b) * c
+
+o
+
+a + (b * c)
+
+La propuesta para una gramática no ambigua es:
+
+program     -> decls ';' add_expr 
+            | add_expr
+
+decls       -> decl ';' decls 
+            | decl
+
+decl        -> type id
+
+type        -> int 
+            | float
+
+add_expr    -> add_expr '+' mult_expr
+            | add_expr '-' mult_expr
+            | mult_expr
+
+mult_expr   -> mult_expr '*' unary_expr
+            | mult_expr '/' unary_expr
+            | unary_expr
+
+unary_expr  -> '-' primary
+            | primary
+
+primary     -> id '=' add_expr 
+            | '(' add_expr ')'
+            | '{' decls ';' add_expr '}'
+            | '{' add_expr '}'
+            | num
+            | id
+
+
+
+
+PREGUNTA 4:
+
+  program -> decls ';' stmt | stmt
+     Program(body = [ ...decls.nodes, ExpressionStatement(stmt.node) ])
+
+   decl -> type ID
+     VariableDeclaration(
+       kind = "let",
+       declarations = [ VariableDeclarator(Identifier(ID), null) ]
+     )
+
+   stmt -> stmt1 ';' stmt2
+     SequenceExpression([stmt1.node, stmt2.node])
+
+   expr -> ID '=' expr1
+     AssignmentExpression("=", Identifier(ID), expr1.node)
+
+   expr -> expr1 '+' term
+     BinaryExpression("+", expr1.node, term.node)
+
+   expr -> expr1 '-' term
+     BinaryExpression("-", expr1.node, term.node)
+
+   term -> term1 '*' factor
+     BinaryExpression("*", term1.node, factor.node)
+
+   term -> term1 '/' factor
+     BinaryExpression("/", term1.node, factor.node)
+
+   factor -> '-' factor1
+     UnaryExpression("-", factor1.node)
+     
+   primary -> ID
+     Identifier(ID)
+
+   primary -> NUM
+     NumericLiteral(NUM)
+
+   primary -> '(' expr ')'
+     expr.node
+
+   primary -> '{' decls ';' stmt '}' | '{' stmt '}'
+     BlockStatement(body = [...])
