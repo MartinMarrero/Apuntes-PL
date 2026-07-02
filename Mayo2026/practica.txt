@@ -1,7 +1,3 @@
-corrigeme esto del 1 al 8 pls, cada pregunta vale dos puntos Ten en cuenta que el examen es a papel y entiendo yo que tampoco es necesario que sea tar cual sería en ordenador, rollo pseudocode
-
-Given the following grammar:
-
 program -> decls ';' expr | expr
 
 decls   -> decl ';' decls | decl
@@ -27,82 +23,77 @@ expr    -> expr ';' expr
 
 %%
 
-"int"                                         { return INT;   }
-"float"                                       { return FLOAT; }
-[a-zA-Z_][a-zA-Z0-9_]*                        { return ID;    }
-[0-9]+(\.[0-9]+)?                             { return NUM;   }
-"+"                                           { return ADD;   }
-"-"                                           { return SUB;   }
-"*"                                           { return MULT;  }
-"/"                                           { return DIV;   }
-"="                                           { return EQ;    }
-"("                                           { return OPPAR; }
-")"                                           { return CLOPAR;}
-"{"                                           { return OPBRA; }
-"}"                                           { return CLOBRA;}
-";"                                           { return SEMCOL;}
-"//".*                                        { /* single line comment */ }
-"/*"([^*]|\*+[^*/])*"*"+"/"                   { /* multi line comment  */ }
-[ \t\r\n]+                                    { /* skips whitespaces   */ }
-
-.                                             { return ERROR; }
+[0-9]+(\.[0-9]+)?                       { return NUM;      }
+[a-zA-Z_][a-zA-Z0-9_]*                  { return ID;       }
+"+"                                     { return ADD;      }
+"-"                                     { return SUB;      }
+"*"                                     { return MULT;     }
+"/"                                     { return DIV;      }
+"="                                     { return EQ;       }
+"("                                     { return OPPAR;    }
+")"                                     { return CLOPAR;   }
+"{"                                     { return OPBRA;    }
+"}"                                     { return CLOBRA;   }
+";"                                     { return SEMICOL;  }
+[ \t\n\r]+                              { /* skip whitespaces    */ }
+"//".*                                  { /* single line comment */ }
+\/\*([^*]|\*+[^\*\/])*\*+\/             { /* multi line comment  */ }
 
 %%
 
 2. a. Is the grammar ambiguous? If so, propose an unambiguous one.
 
-Sí, la gramática es ambigua, pues no establece un orden de precedencias para prácticamente ninguna operación. Por ejemplo, la siguiente línea:
+Yes, the grammar is ambiguous, this is caused by the lack of precedences in the grammar;
+for example, for the following line of code:
 
 a + b * c
 
-El compilador podría interpretarla como:
+the compiler can read:
 
 (a + b) * c
 
-o
+or also:
 
 a + (b * c)
 
-La propuesta para una gramática no ambigua es:
+a proposal for a non-ambiguous grammar is the following:
 
-program     -> decls ';' add_expr 
-            | add_expr
+program -> decls ';' assign_expr
+        | assign_expr
 
-decls       -> decl ';' decls 
-            | decl
+decls -> decl ';' decls
+    	| decl
 
-decl        -> type id
+decl -> type id
 
-type        -> int 
-            | float
+type -> int
+			| float
 
-assign_expr -> id '=' assign_expr
-            | add_expr
+assign_expr -> id '=' add_expr
+						| add_expr
 
-add_expr    -> add_expr '+' mult_expr
-            | add_expr '-' mult_expr
-            | mult_expr
+add_expr -> add_expr '+' mult_expr
+					| add_expr '-' mult_expr
+					| mult_expr
 
-mult_expr   -> mult_expr '*' unary_expr
-            | mult_expr '/' unary_expr
-            | unary_expr
+mult_expr -> mult_expr '*' unary_expr
+					| mult_expr '/' unary_expr
+					| unary_expr
 
-unary_expr  -> '-' primary
-            | primary
+unary_expr -> '-' primary
+						| primary
 
-primary     -> '(' assign_expr ')'
-            | '{' decls ';' assign_expr '}'
-            | '{' assign_expr '}'
-            | num
-            | id
+primary -> num
+				| id
+				| '(' assign_expr ')'
+        | '{' decls ';' assign_expr '}'
+        | '{' assign_expr '}'
 
    b. Write the code for a bison-style parser based on the grammar you proposed.
 
-%token ADD SUB MULT DIV
+%token ADD SUB MULT DIV EQ
+%token ID NUM INT FLOAT OPPAR CLOPAR OPBRA CLOBRA
 %token UMINUS
-%token INT ID FLOAT NUM
-%token OPPAR CLOPAR OPBRA CLOBRA SEMCOL
-%token EQ
 
 %right EQ
 %left ADD SUB
@@ -111,172 +102,197 @@ primary     -> '(' assign_expr ')'
 
 %%
 
-program         : decls SEMCOL assign_expr
-                | assign_expr
-                ;
+program				: decls SEMICOL assign_expr
+							| assign_expr
+							;
 
-decls           : decl SEMCOL decls
-                | decl
-                ;
+decls					: decl SEMICOL decls
+							| decl
+							;
 
-decl            : type ID
+decl					: type ID
+							;
 
-type            : INT
-                | FLOAT
-                ;
+type					: INT
+							| FLOAT
+							;
 
-assign_expr     : ID EQ assign_expr
-                | add_expr
+assign_expr 	: ID EQ add_expr 
+							| add_expr
 
-add_expr        : add_expr ADD mult_expr
-                | add_expr SUB mult_expr
-                | mult_expr
-                ;
+add_expr 			: add_expr ADD mult_expr
+							| add_expr SUB mult_expr
+							| mult_expr
+							;
 
-mult_expr       : mult_expr MULT unary_expr
-                | mult_expr DIV  unary_expr
-                | unary_expr
-                ;
+mult_expr     : mult_expr MULT unary_expr
+							| mult_expr DIV  unary_expr
+							| unary_expr
+							;
 
-unary_expr      : SUB primary %prec UMINUS
-                | primary
-                ;
+unary_expr    : SUB primary %prec UMINUS
+							| primary
+							;
 
-primary         : OPPAR assign_expr CLOPAR
-                | OPBRA decls SEMCOL assign_expr CLOBRA
-                | OPBRA assign_expr CLOBRA
-                | NUM
-                | ID
-                ;
+primary				: ID
+							| NUM
+							| OPPAR assign_expr CLOPAR
+							| OPBRA decls SEMICOL assign_expr CLOBRA
+							| OPBRA assign_expr CLOBRA
+							;
 
 3. a. Define the data structure for the symbol table. Write a syntax-directed
       definition to perform scope analysis based on the grammar you proposed.
 
-    
+			SymbolEntry {
+				name: string
+				type: INT | FLOAT
+				kind: VAR
+			}
 
-  SymbolEntry {
-    name: string
-    type: INT | FLOAT
-    kind: var
-  }
+			SymbolTable = stack<HashTable<name, SymbolEntry>>
+			
+			
+			with operations:
+				enter_scope() // push to the stack
+				exit_scope()  // pop from the stack
+				insert(name, entry)
+				lookup(name)
 
-  SymbolTable = stack<HashTable<string, SymbolEntry>>
+			program -> decls ';' assign_expr
+			{ 
+				enter_scope();
+				decls.env = env;
+				assign_expr.env = env;
+				exit_scope();
+			}
 
-  operaciones:
+			program -> assign_expr
+			{
+				enter_scope();
+				assign_expr.env = env;
+				exit_scope();
+			}
 
-  enter_scope() // push
-  exit_scope()  // pop
-  insert(name, entry)
-  lookup(name)
+			decls -> decl ';' decls2
+			{
+				decl.env = env;
+				decls2.env = env;
+			}
 
-  program -> decls ';' expr
-  {
-  enter_scope();
-  decls.env = env;
-  expr.env = env;
-  exit_scope(); 
-  }
+			decls -> decl
+			{
+				decl.env = env;
+			}
 
-  program -> expr
-  {
-    enter_scope();
-    expr.env = env;
-    exit_scope();
-  }
+			decl -> type id;
+			{
+				if(lookup(id) != null) { error("variable redeclaration"); }
+				insert(ID, SymbolEntry(ID, type.type));
+			}
 
-  decls -> decl ';' decls2
-  {
-    decl.env = env;
-    decls2.env = env;
-  }
+			type -> int
+			{
+				type.type = int;
+			}
 
-  decls -> decl
-  {
-    decl.env = env;
-  }
+			type -> float
+			{
+				type.type = float;
+			}
 
-  decl -> type ID
-  {
-    if(lookup(ID) != null) { error("redefined variable");}
-    insert(ID, SymbolEntry(ID, type.type));
-  }
+			primary -> id
+			{
+				if(lookup(id) == null) { error("undefined variable"); }
+			}
 
-  type -> INT
-  {
-    type.type = INT;
-  }
+			primary -> '(' assign_expr ')'
+			{
+				assign_expr.env = env;
+			}
 
-  type -> FLOAT
-  {
-    type.type = FLOAT;
-  }
+      primary -> '{' decls ';' assign_expr '}'
+			{
+				enter_scope();
+				decls.env = env;
+				assign_expr.env = env;
+				exit_scope();
+			}
 
-  expr -> ID
-  { 
-    if(lookup(ID) == null) { error("undefined variable"); }
-  }
+			primary -> '{' assign_expr '}'
+			{
+				enter_scope();
+				assign_expr.env = env;
+				exit_scope();
+			}
 
-  expr -> OPBRA decls SEMCOL expr2 CLOBRA
-  {
-    enter_scope();
-    decls.env = env;
-    expr2.env = env;
-    exit_scope();
-  }
-
-  expr -> OPBRA expr2 CLOBRA
-  {
-    enter_scope();
-    expr2.env = env;
-    exit_scope();
-  }
-
-  expr -> expr1 ADD expr2
-  {
-    expr1.env = env;
-    expr2.env = env;
-  }
-
-  (lo mismo para - * /)
-
-  
    b. Define the data structure for the expression types and the typing rules.
       Write a syntax-directed definition to perform type analysis based on the
       grammar you proposed.
 
-    [blank]
+			T ::= INT | FLOAT
+
+			type(num) = INT | FLOAT | ERROR
+
+			type(ID) = lookup(id).type
+
+			type(e1 + e2) =
+				if((type(e1) == FLOAT || type(e2) == FLOAT) && (type(e1) != ERROR && type(e2) != ERROR)) {
+					return FLOAT;
+				}
+				else {
+					error("Incorrect type");
+				}
+
+			(same for - and *)
+
+			type(e1 / e2) =
+				if(type(e1) == ERROR || type(e2) == ERROR) { error("Incorrect type"); }
+				else { return FLOAT; }
+
+			type(id = e1) =
+				if(type(id) == ERROR || type(e1) == ERROR) { error("Incorrect type"); }
+				elsif(type(id) == FLOAT || type(e1) == FLOAT) { return FLOAT; }
+				else { return INT; }
 
 4. Write a syntax-directed definition that generates a @Babel-style AST as the
    intermediate representation based on the grammar you proposed.
 
-   program -> decls ';' stmt | stmt 
-      Program(body = [...decls.nodes, ExpressionStatement(stmt.node) ])
+	program -> decls ';' assign_expr
+		Program(body = [...decls.node, ExpressionStatement(assign_expr)])
 
-  decl -> type ID
-    VariableDeclaration(
-      kind = "let"
-      declarations = [VariableDeclarator((Identifier(ID)), null)]
-    )
+	program -> assign_expr
+		Program(body = [...ExpressionStatement(assign_expr)])
 
-  stmt -> stmt1 ';' stmt2
-    SequenceExpression({stmt1.node, stmt2.node})
+	decl -> type id
+		VariableDeclarator (
+			kind: "let"
+			declarations: [VariableDeclaration(id, ERROR)]
+		)
 
-  add_expr -> expr1 '+' term
-    BinaryExpression('+', expr1.node, term.node)
+	assign_expr -> id '=' add_expr
+		AssignmentExpression(id, add_expr)
 
-    (esto se repite para - * /)
+	add_expr -> add_expr '+' mult_expr
+		BinaryExpression('+', add_expr, mult_expr)
+	
+	(same for -)
 
-  factor -> '-' factor1
-    UnaryExpression('-', factor1.node)
+	mult_expr -> mult_expr '*' primary
+		BinaryExpression('*', mult_expr, primary)
 
-  primary -> ID
-    Identifier(ID)
+	(same for /)
 
-  primary -> NUM
-    NumericLiteral(NUM)
+	primary -> id
+		Identifier(id)
 
-  primary -> '(' expr ')'
-    expr.node
+	primary -> num
+		NumericLiteral(num)
 
-  primary -> '{' decls ';' stmt '}' | '{' stmt '}'
-    BlockStatement(body = [...])
+	primary -> '(' assign_expr ')'
+		assign_expr.node
+
+	primary -> '{' decls ';' assign_expr '}' | '{' assign_expr '}'
+		BlockStatement(
+			body = [...]
+		)
