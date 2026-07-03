@@ -1,0 +1,977 @@
+program -> decls ';' expr | expr
+
+decls   -> decl ';' decls | decl
+
+decl    -> type id
+
+type    -> int | float
+
+expr    -> expr ';' expr
+        | expr '+' expr
+        | expr '-' expr
+        | expr '*' expr
+        | expr '/' expr
+        | id '=' expr
+        | '(' expr ')'
+        | '{' decls ';' expr '}'
+        | '{' expr '}'
+        | num
+        | id
+
+
+########################################################
+              FIRST QUESTION 
+########################################################
+
+1. Provide the lexical specification for the grammar using a [] generator.
+   Allow for whitespace, as well as single line and multiple lines comments.
+
+########################################################
+              FLEX STYLE GENERATOR 
+########################################################
+
+%%
+
+"int"                   { return INT;   }
+"float"                 { return FLOAT; }
+[0-9]+(\.[0-9]+)?       { return NUM;   }
+[a-zA-Z_]+[a-zA-Z0-9_]* { return ID;    }
+"+"                     { return ADD; }
+"-"   { return SUB; }
+"*"   { return MULT; }
+"/"   { return DIV; }
+"="   { return EQ; }
+"("   { return OPPAR; }
+")"   { return CLOPAR;}
+"{"   { return OPBRA; }
+"}"   { return CLOBRA;}
+";"   { return SEMCOL; }
+
+[ \r\n\t]+  { /* ignore whitespaces */ }
+"//".* { /* single line comment */ }
+\/\*[^*]*\*+([^*]*[^/*]\*+)*\/ { /* multi line comment */ }
+
+%%
+
+########################################################
+              MANUAL GENERATOR 
+########################################################
+
+reserved = {"int": INT, "float": FLOAT}
+
+// symbol is input[pos]
+
+function getTokens() {
+
+  pos = 0;
+
+  skipWhitespacesAndComments();
+
+
+  //  IDs and keywords 
+
+  if(isLetter(symbol)) { 
+    start = pos;
+    while(pos < input.size() && (isLetter(symbol) || isDigit(symbol))) {
+      pos++;
+    } 
+    lexeme = input[start..pos];
+    if (lexeme in reserved){
+      return Token(reserved[lexeme], lexeme);
+    }
+    return Token(ID, lexeme);
+  }
+
+  // Numbers
+
+  if (isDigit(symbol)) {
+    start = pos;
+
+    // integer part
+
+    while(pos < input.size() && isDigit(symbol)) {
+      pos++;
+    }
+    
+    if(pos < input.size() && symbol == '.' && pos+1 < input.size() && isDigit(input[pos+1])) {
+      pos++;
+    }
+    
+    while(pos < input.size() && isDigit(symbol)) {
+      pos++;
+    }
+
+    lexeme = input[start..pos];
+    return Token(NUM, lexeme)
+  }
+
+
+  // single char symbols 
+
+  c = pos;
+  pos++;
+  switch(c) {
+    case'+': return Token(ADD, "+");
+    case'-': return Token(SUB, "-");
+    case'*': return Token(MULT, "*");
+    case'/': return Token(DIV, "/");
+    case';': return Token(SEMCOL, ";");
+    case'=': return Token(EQ, "=");
+    case'(': return Token(OPPAR, "(");
+    # case')': return Token(CLOPAR, ")");
+    # case'{': return Token(OPBRA, "{");
+    # case'}': return Token(CLOBRA, "}");
+    default: error("unrecognized character: " + c + "in line: " + line_number);
+  }
+}
+
+###############################################################
+												SECOND QUESTION
+###############################################################
+
+2. a. Is the grammar ambiguous? If so, propose an unambiguous one.
+
+Yes, the grammar is ambiguous, this is because there are no stablished precendes between operators
+
+For example:
+
+for id + id * id
+
+There is this derivation:
+
+expr
+-> expr '*' expr
+-> expr '+' expr '*' expr
+-> id '+' expr '*' expr
+-> id '+' id '*' expr
+-> id '+' id '*' id
+
+and also this one:
+
+expr
+-> expr '+' expr
+-> id '+' expr 
+-> id '+' expr '*' expr
+-> id '+' id '*' expr
+-> id '+' id '*' id
+
+The following is a proposition of a non-ambiguous grammar:
+
+program       -> decls ';' semcol_expr
+              | semcol_expr
+
+decls         -> decl ';' decls
+              | decl
+
+decl          -> type id
+
+type          -> int
+              | float
+
+semcol_expr   -> assign_expr ';' semcol_expr
+              | assign_expr
+
+assign_expr   -> id '=' assign_expr
+              | add_expr
+
+add_expr      -> add_expr '+' mult_expr
+              | add_expr '-' mult_expr
+              | mult_expr
+
+mult_expr     -> mult_expr '*' primary
+              | mult_expr '/' primary
+              | primary
+
+primary       -> '(' semcol_expr ')'
+              | '{' semcol_expr '}'
+              | '{' decls ';' semcol_expr '}'
+              | num
+              | id
+
+ b. Write the code for a [] parser based on the grammar you proposed.
+ 
+###############################################################
+                AUTOMATIC LR JISON-STYLE PARSER
+###############################################################
+
+program         -> decls SEMCOL semcol_expr
+                | semcol_expr
+                ;
+
+decls           -> decl SEMCOL decls
+                | decl
+                ;
+
+decl            -> type ID
+
+type            -> INT
+                | FLOAT
+                ;
+
+assign_expr     -> ID EQ assign_expr
+                | add_expr
+                ;
+
+semcol_expr     -> assign_expr SEMCOL semcol_expr
+                | assign_expr
+                ;
+
+add_expr        -> add_expr ADD mult_expr
+                | add_expr SUB mult_expr
+                | mult_expr
+                ;
+
+mult_expr       -> mult_expr MULT primary
+                | mult_expr DIV primary
+                | primary
+                ;
+
+primary         -> OPPAR assign_expr CLOPAR
+                | OPBRA semcol_expr CLOBRA
+                | OPBRA decls SEMCOL semcol_expr CLOBRA
+                | NUM
+                | ID
+                ;
+
+###############################################################
+                MANUAL LL PREDICTIVE PARSER
+###############################################################
+
+first, we have to modify the grammar to eliminate left recursion
+
+program         -> decls ';' semcol_expr
+                | semcol_expr
+
+
+decls -> decl decls_prime
+
+decls_prime -> ';' decl decls_prime
+            | ε
+
+decl            -> type id
+
+type            -> int
+                | float
+
+assign_expr     -> id '=' assign_expr
+                | add_expr
+
+semcol_expr     -> assign_expr ';' semcol_expr
+                | assign_expr
+
+add_expr        -> mult_expr add_expr_prime
+add_expr_prime  -> '+' mult_expr add_expr_prime
+                | '-' mult_expr add_expr_prime
+                | ε
+
+mult_expr       -> primary mult_expr'
+mult_expr'      -> '*' primary mult_expr'
+                | '/' primary mult_expr'
+                | ε
+
+primary         -> '(' assign_expr ')'
+                | '{' semcol_expr '}'
+                | '{' decls ';' semcol_expr '}'
+                | num
+                | id   
+
+then the parser would look like this:
+
+// auxiliary functions
+
+currentToken() { return tokens[pos]; }
+nextToken()    { return tokens[pos+1]; }
+peek(k)        { return tokens[pos+k]; }
+
+match(expectedToken) {
+  if (currentToken() == expectedToken) {
+    pos++;
+  } else {
+    error("unexpected token in line: " + line_number);
+  }
+}
+
+program() {
+  if (currentToken() == INT || currentToken() == FLOAT) {
+    decls();
+    match(SEMCOL);
+    semcol_expr();
+  } else {
+    semcol_expr();
+  }
+}
+
+semcol_expr() {
+  assign_expr();
+  if (currentToken() == SEMCOL) {
+    match(SEMCOL);
+    semcol_expr();
+  }
+}
+
+decls() {
+  decl();
+  if (currentToken() == SEMCOL && (nextToken() == INT || nextToken() == FLOAT)) {
+    match(SEMCOL);
+    decls();
+  }
+}
+
+decl() {
+  type();
+  match(ID);
+}
+
+type() {
+  if (currentToken() == INT) {
+    match(INT);
+  } else if (currentToken() == FLOAT) {
+    match(FLOAT);
+  } else {
+    error("unexpected token in line: " + line_number);
+  }
+}
+
+assign_expr() {
+  if (currentToken() == ID && nextToken() == EQ) {
+    match(ID);
+    match(EQ);
+    assign_expr();
+  } else {
+    add_expr();
+  }
+}
+
+add_expr() {
+  mult_expr();
+  add_expr_prime();
+}
+
+add_expr_prime() {
+  if (currentToken() == ADD) {
+    match(ADD);
+    mult_expr();
+    add_expr_prime();   
+  } else if (currentToken() == SUB) {
+    match(SUB);
+    mult_expr();
+    add_expr_prime();
+  }
+  // else: ε, no hace nada
+}
+
+mult_expr() {
+  primary();
+  mult_expr_prime();
+}
+
+mult_expr_prime() {
+  if (currentToken() == MULT) {
+    match(MULT);
+    primary();
+    mult_expr_prime(); 
+  } else if (currentToken() == DIV) {
+    match(DIV);
+    primary();
+    mult_expr_prime();
+  }
+  // else: ε, no hace nada
+}
+
+primary() {
+  switch (currentToken()) {
+
+    case OPPAR:
+      match(OPPAR);
+      assign_expr();
+      match(CLOPAR);
+      break;
+
+    case OPBRA:
+      match(OPBRA);
+      if (currentToken() == INT || currentToken() == FLOAT) {
+        decls();
+        match(SEMCOL);
+      }
+      semcol_expr();
+      match(CLOBRA);
+      break;
+
+    case NUM:
+      match(NUM);
+      break;
+
+    case ID:
+      match(ID);
+      break;
+
+    default:
+      error("unexpected token in line: " + line_number);
+      break;
+  }
+}
+
+##############################################################
+												THIRD QUESTION
+###############################################################
+
+3. a. Define the data structure for the symbol table. Write a syntax-directed
+      definition to perform scope analysis based on the grammar you proposed.
+
+Symbol = { name, type, declaredAt }
+
+SymbolTable = stack of scopes
+Scope = map from name to Symbol
+
+Operations:
+- enterScope(): push a new empty scope
+- exitScope(): pop the current scope
+- currentScope(): return the top scope
+- define(name, symbol): add only to current scope
+- lookup(name): search from current scope outward
+
+The idea is simple: declarations go into the current scope, and uses search from the inside out.
+If a name is declared twice in the same scope, report an error.
+If a name is used but not found, report an undeclared-variable error.
+
+program -> decls ';' semcol_expr
+{
+  enterScope()
+  decls.env = currentScope()
+  semcol_expr.env = currentScope()
+  exitScope()
+}
+
+program -> semcol_expr
+{
+  semcol_expr.env = globalScope
+}
+
+decls -> decl ';' decls
+{
+  decl.env = env
+  decls[1].env = env
+}
+
+decls -> decl
+{
+  decl.env = env
+}
+
+decl -> type ID
+{
+  if currentScope already has ID.lexeme then
+    error("variable already declared in this scope")
+  else
+    define(ID.lexeme, { name: ID.lexeme, type: type.type, declaredAt: ID.location })
+}
+
+type -> INT
+{
+  type.type = INT
+}
+
+type -> FLOAT
+{
+  type.type = FLOAT
+}
+
+semcol_expr -> assign_expr ';' semcol_expr
+{
+  assign_expr.env = env
+  semcol_expr[1].env = env
+}
+
+semcol_expr -> assign_expr
+{
+  assign_expr.env = env
+}
+
+assign_expr -> ID '=' assign_expr
+{
+  if lookup(ID.lexeme) is null then
+    error("variable not declared")
+  assign_expr[1].env = env
+}
+
+assign_expr -> add_expr
+{
+  add_expr.env = env
+}
+
+add_expr -> add_expr '+' mult_expr
+{
+  add_expr[1].env = env
+  mult_expr.env = env
+}
+
+add_expr -> add_expr '-' mult_expr
+{
+  add_expr[1].env = env
+  mult_expr.env = env
+}
+
+add_expr -> mult_expr
+{
+  mult_expr.env = env
+}
+
+mult_expr -> mult_expr '*' primary
+{
+  mult_expr[1].env = env
+  primary.env = env
+}
+
+mult_expr -> mult_expr '/' primary
+{
+  mult_expr[1].env = env
+  primary.env = env
+}
+
+mult_expr -> primary
+{
+  primary.env = env
+}
+
+primary -> '(' assign_expr ')'
+{
+  assign_expr.env = env
+}
+
+primary -> '{' semcol_expr '}'
+{
+  enterScope()
+  semcol_expr.env = currentScope()
+  exitScope()
+}
+
+primary -> '{' decls ';' semcol_expr '}'
+{
+  enterScope()
+  decls.env = currentScope()
+  semcol_expr.env = currentScope()
+  exitScope()
+}
+
+primary -> NUM {}
+
+primary -> ID
+{
+  if lookup(ID.lexeme) is null then
+    error("variable not declared")
+}
+
+In short: this SDD is just the scope-analysis version of the compiler pipeline.
+It checks declarations, resolves uses, and keeps nested blocks isolated from each other.
+}
+
+decls() {
+  decl();
+  if (currentToken() == SEMCOL && (nextToken() == INT || nextToken() == FLOAT)) {
+    match(SEMCOL);
+    decls();
+  }
+}
+
+decl() {
+  type();
+  match(ID);
+}
+
+######################################################################################
+          AST TREE 
+######################################################################################
+
+program -> decls ';' semcol_expr
+{
+  program.ast = buildProgram(decls.ast, semcol_expr.ast)
+}
+
+program -> semcol_expr
+{
+  program.ast = buildProgram([], semcol_expr.ast)
+}
+
+decls -> decl ';' decls
+{
+  decls.ast = buildList(decl.ast, decls[1].ast)
+}
+
+decls -> decl
+{
+  decls.ast = buildList(decl.ast, [])
+}
+
+decl -> type ID
+{
+  decl.ast = buildDecl(type.ast, ID.lexeme)
+}
+
+type -> INT
+{
+  type.ast = buildType("int")
+}
+
+type -> FLOAT
+{
+  type.ast = buildType("float")
+}
+
+semcol_expr -> assign_expr ';' semcol_expr
+{
+  semcol_expr.ast = buildSequence(assign_expr.ast, semcol_expr[1].ast)
+}
+
+semcol_expr -> assign_expr
+{
+  semcol_expr.ast = assign_expr.ast
+}
+
+assign_expr -> ID EQ assign_expr
+{
+  assign_expr.ast = buildAssign(ID.lexeme, assign_expr[1].ast)
+}
+
+assign_expr -> add_expr
+{
+  assign_expr.ast = add_expr.ast
+}
+
+add_expr -> add_expr ADD mult_expr
+{
+  add_expr.ast = buildBinaryExpression('+', add_expr[1].ast, mult_expr.ast)
+}
+
+add_expr -> add_expr SUB mult_expr
+{
+  add_expr.ast = buildBinaryExpression('-', add_expr[1].ast, mult_expr.ast)
+}
+
+add_expr -> mult_expr
+{
+  add_expr.ast = mult_expr.ast
+}
+
+mult_expr -> mult_expr MULT primary
+{
+  mult_expr.ast = buildBinaryExpression('*', mult_expr[1].ast, primary.ast)
+}
+
+mult_expr -> mult_expr DIV primary
+{
+  mult_expr.ast = buildBinaryExpression('/', mult_expr[1].ast, primary.ast)
+}
+
+mult_expr -> primary
+{
+  mult_expr.ast = primary.ast
+}
+
+primary -> OPPAR assign_expr CLOPAR
+{
+  primary.ast = assign_expr.ast
+}
+
+primary -> OPBRA semcol_expr CLOBRA
+{
+  primary.ast = buildBlockExpression([], semcol_expr.ast)
+}
+
+primary -> OPBRA decls SEMCOL semcol_expr CLOBRA
+{
+  primary.ast = buildBlockExpression(decls.ast, semcol_expr.ast)
+}
+
+primary -> NUM
+{
+  primary.ast = buildNumericLiteral(NUM.lexeme)
+}
+
+primary -> ID
+{
+  primary.ast = buildIdentifierExpression(ID.lexeme)
+}
+
+  
+######################################################################################
+          DAG 
+######################################################################################
+
+
+nodeTable = map from (operator, left, right) to node
+
+internLeaf(kind, value)
+{
+  if leaf already exists for this value then return it
+  else create leaf and store it
+}
+
+internNode(op, left, right)
+{
+  key = (op, left, right)
+  if key already exists in nodeTable then return stored node
+  else create new node, store it, and return it
+}
+
+program -> decls ';' semcol_expr
+{
+  program.dag = semcol_expr.dag
+}
+
+program -> semcol_expr
+{
+  program.dag = semcol_expr.dag
+}
+
+decls -> decl ';' decls
+{
+  decls.dag = decls[1].dag
+}
+
+decls -> decl
+{
+  decls.dag = decl.dag
+}
+
+decl -> type ID
+{
+  decl.dag = internLeaf('decl', ID.lexeme)
+}
+
+type -> INT
+{
+  type.type = INT
+}
+
+type -> FLOAT
+{
+  type.type = FLOAT
+}
+
+semcol_expr -> assign_expr ';' semcol_expr
+{
+  semcol_expr.dag = semcol_expr[1].dag
+}
+
+semcol_expr -> assign_expr
+{
+  semcol_expr.dag = assign_expr.dag
+}
+
+assign_expr -> ID EQ assign_expr
+{
+  assign_expr.dag = internNode('=', internLeaf('id', ID.lexeme), assign_expr[1].dag)
+}
+
+assign_expr -> add_expr
+{
+  assign_expr.dag = add_expr.dag
+}
+
+add_expr -> add_expr ADD mult_expr
+{
+  add_expr.dag = internNode('+', add_expr[1].dag, mult_expr.dag)
+}
+
+add_expr -> add_expr SUB mult_expr
+{
+  add_expr.dag = internNode('-', add_expr[1].dag, mult_expr.dag)
+}
+
+add_expr -> mult_expr
+{
+  add_expr.dag = mult_expr.dag
+}
+
+mult_expr -> mult_expr MULT primary
+{
+  mult_expr.dag = internNode('*', mult_expr[1].dag, primary.dag)
+}
+
+mult_expr -> mult_expr DIV primary
+{
+  mult_expr.dag = internNode('/', mult_expr[1].dag, primary.dag)
+}
+
+mult_expr -> primary
+{
+  mult_expr.dag = primary.dag
+}
+
+primary -> OPPAR assign_expr CLOPAR
+{
+  primary.dag = assign_expr.dag
+}
+
+primary -> OPBRA semcol_expr CLOBRA
+{
+  primary.dag = semcol_expr.dag
+}
+
+primary -> OPBRA decls SEMCOL semcol_expr CLOBRA
+{
+  primary.dag = semcol_expr.dag
+}
+
+primary -> NUM
+{
+  primary.dag = internLeaf('num', NUM.lexeme)
+}
+
+primary -> ID
+{
+  primary.dag = internLeaf('id', ID.lexeme)
+}
+
+######################################################################################
+          SSA 3AC+
+######################################################################################
+
+tempCount = 0
+versionMap = map from variable name to current SSA version
+
+newTemp()
+{
+  tempCount = tempCount + 1
+  return "t" + tempCount
+}
+
+newVersion(name)
+{
+  versionMap[name] = versionMap[name] + 1
+  return name + "." + versionMap[name]
+}
+
+currentVersion(name)
+{
+  return name + "." + versionMap[name]
+}
+
+program -> decls ';' semcol_expr
+{
+  program.code = decls.code + semcol_expr.code
+}
+
+program -> semcol_expr
+{
+  program.code = semcol_expr.code
+}
+
+decls -> decl ';' decls
+{
+  decls.code = decl.code + decls[1].code
+}
+
+decls -> decl
+{
+  decls.code = decl.code
+}
+
+decl -> type ID
+{
+  declare variable ID.lexeme in SSA table
+  decl.code = ""
+}
+
+type -> INT
+{
+  type.type = INT
+}
+
+type -> FLOAT
+{
+  type.type = FLOAT
+}
+
+semcol_expr -> assign_expr ';' semcol_expr
+{
+  semcol_expr.code = assign_expr.code + semcol_expr[1].code
+}
+
+semcol_expr -> assign_expr
+{
+  semcol_expr.code = assign_expr.code
+}
+
+assign_expr -> ID EQ assign_expr
+{
+  target = newVersion(ID.lexeme)
+  assign_expr.place = target
+  assign_expr.code = assign_expr[1].code + target + " = " + assign_expr[1].place
+}
+
+assign_expr -> add_expr
+{
+  assign_expr.place = add_expr.place
+  assign_expr.code = add_expr.code
+}
+
+add_expr -> add_expr ADD mult_expr
+{
+  t = newTemp()
+  add_expr.place = t
+  add_expr.code = add_expr[1].code + mult_expr.code + t + " = " + add_expr[1].place + " + " + mult_expr.place
+}
+
+add_expr -> add_expr SUB mult_expr
+{
+  t = newTemp()
+  add_expr.place = t
+  add_expr.code = add_expr[1].code + mult_expr.code + t + " = " + add_expr[1].place + " - " + mult_expr.place
+}
+
+add_expr -> mult_expr
+{
+  add_expr.place = mult_expr.place
+  add_expr.code = mult_expr.code
+}
+
+mult_expr -> mult_expr MULT primary
+{
+  t = newTemp()
+  mult_expr.place = t
+  mult_expr.code = mult_expr[1].code + primary.code + t + " = " + mult_expr[1].place + " * " + primary.place
+}
+
+mult_expr -> mult_expr DIV primary
+{
+  t = newTemp()
+  mult_expr.place = t
+  mult_expr.code = mult_expr[1].code + primary.code + t + " = " + mult_expr[1].place + " / " + primary.place
+}
+
+mult_expr -> primary
+{
+  mult_expr.place = primary.place
+  mult_expr.code = primary.code
+}
+
+primary -> OPPAR assign_expr CLOPAR
+{
+  primary.place = assign_expr.place
+  primary.code = assign_expr.code
+}
+
+primary -> OPBRA semcol_expr CLOBRA
+{
+  primary.place = semcol_expr.place
+  primary.code = semcol_expr.code
+}
+
+primary -> OPBRA decls SEMCOL semcol_expr CLOBRA
+{
+  primary.place = semcol_expr.place
+  primary.code = decls.code + semcol_expr.code
+}
+
+primary -> NUM
+{
+  primary.place = newTemp()
+  primary.code = primary.place + " = " + NUM.lexeme
+}
+
+primary -> ID
+{
+  primary.place = currentVersion(ID.lexeme)
+  primary.code = ""
+}

@@ -128,7 +128,6 @@ function getTokens() {
       case'-': return Token(SUB, "-");
       case'*': return Token(MULT, "*");
       case'/': return Token(DIV, "/");
-      case',': return Token(assign, ",");
       case';': return Token(SEMCOL, ";");
       case'=': return Token(EQ, "=");
       case'(': return Token(OPPAR, "(");
@@ -256,8 +255,8 @@ primary         -> OPPAR assign_expr CLOPAR
 
 First, we have to modify the grammar slightly to eliminate left recursion:
 
-program         -> decls ';' comma_expr
-                | comma_expr
+program         -> decls ';' assign_expr
+                | assign_expr
 
 decls           -> decl ';' decls
                 | decl
@@ -267,8 +266,7 @@ decl            -> type id
 type            -> int
                 | float
 
-assign_expr     -> id '=' as
-sign_expr
+assign_expr     -> id '=' assign_expr
                 | add_expr
 
 add_expr        -> mult_expr add_expr_prime
@@ -359,6 +357,7 @@ function add_expr_prime() {
       match('-');
     }
     mult_expr();
+    add_expr(); 
   }
 }
 
